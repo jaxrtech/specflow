@@ -31,7 +31,7 @@ export const CurrencyInput: FC<Props> = (props) => {
     style.textAlign = 'right';
   }
 
-  const decimalPlaces = props.decimalPlaces || 0;
+  const decimalPlaces = typeof props.decimalPlaces !== 'undefined' ? props.decimalPlaces : 2;
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>): void => {

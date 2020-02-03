@@ -22,8 +22,11 @@ export enum LineItemUnit {
   CostPerPerson = 'per person',
   CostPerGroup = 'per group',
   Miles = 'miles',
-  PerMile = 'per mile',
+  CostPerMile = 'per mile',
   Persons = 'people',
+  Rooms = 'rooms',
+  CostPerRoomPerNight = 'USD/room/night',
+  Nights = 'nights',
 }
 
 type LineItemUnitSpec = {
@@ -56,8 +59,21 @@ const LineItemUnitSpecs: Record<LineItemUnit, LineItemUnitSpec> = {
     tag: 'miles',
     decimalPlaces: 1
   },
-  [LineItemUnit.PerMile]: {
-    value: LineItemUnit.PerMile,
+  [LineItemUnit.Rooms]: {
+    value: LineItemUnit.Rooms,
+    label: 'rooms',
+    tag: 'rooms',
+    decimalPlaces: 0
+  },
+  [LineItemUnit.CostPerRoomPerNight]: {
+    value: LineItemUnit.CostPerRoomPerNight,
+    iconInput: 'dollar',
+    label: 'per room',
+    tag: 'per room',
+    paddingRight: '4.8em',
+  },
+  [LineItemUnit.CostPerMile]: {
+    value: LineItemUnit.CostPerMile,
     iconInput: 'dollar',
     label: 'per mile',
     tag: 'per mile',
@@ -70,6 +86,14 @@ const LineItemUnitSpecs: Record<LineItemUnit, LineItemUnitSpec> = {
     label: '# of people',
     tag: 'people',
     paddingRight: '4em',
+    decimalPlaces: 0
+  },
+  [LineItemUnit.Nights]: {
+    value: LineItemUnit.Nights,
+    iconInput: 'moon',
+    label: 'nights',
+    tag: 'nights',
+    decimalPlaces: 0
   }
 }
 
@@ -103,7 +127,10 @@ export const LineItemInput = (props: LineItemInputProps) => {
               textAlign: 'right',
               paddingRight: unitSpec.paddingRight || '3.5em',
               width: 196} : undefined}
-            decimalPlaces={overrideDecimalPlaces || unitSpec.decimalPlaces} />
+            decimalPlaces={
+              typeof overrideDecimalPlaces !== 'undefined' ? overrideDecimalPlaces :
+              typeof unitSpec.decimalPlaces !== 'undefined' ? unitSpec.decimalPlaces :
+              undefined} />
           {tag
             ? <span className={Classes.INPUT_ACTION}>
                 <Tag style={{ float: 'right' }} minimal={true}>{tag}</Tag>

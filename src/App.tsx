@@ -1,6 +1,6 @@
 import React, { useState, Dispatch, SetStateAction } from 'react';
 import BN from 'bignumber.js';
-import { Navbar, Button, Alignment, Card, Elevation, FormGroup, InputGroup, ControlGroup, ButtonGroup, Classes, Icon, HTMLSelect, IOptionProps, Tag } from '@blueprintjs/core';
+import { Navbar, Button, Alignment, Card, Elevation, FormGroup, InputGroup, ControlGroup, ButtonGroup, Classes, Icon, HTMLSelect, IOptionProps, Tag, Switch, IconName } from '@blueprintjs/core';
 import { LineItemInput, LineItemUnit, LineItemInputProps } from './components/LineItemInput';
 
 import { DateRange, DateRangeInput, IDateFormatProps, TimePrecision } from "@blueprintjs/datetime";
@@ -60,6 +60,10 @@ const createFormOps = (attendeesCount: FormVariable) => ({
   },
 
   PER_PERSON(x: FormVariable) {
+    if (attendeesCount.value === new BN(0)) {
+      return new BN(0);
+    }
+
     if (x.unit === LineItemUnit.CostPerPerson) {
       return x.value;
     }
@@ -71,13 +75,31 @@ const createFormOps = (attendeesCount: FormVariable) => ({
     throw new Error('invalid form variable unit');
   },
 
-  TIMES(scalar: FormVariable, per: FormVariable) {
-    if (scalar.unit === LineItemUnit.Miles && per.unit === LineItemUnit.PerMile) {
+  TIMES(scalar: FormVariable, per: FormVariable, per2?: FormVariable) {
+    if (scalar.unit === LineItemUnit.Miles && per.unit === LineItemUnit.CostPerMile) {
       return scalar.value.times(per.value);
+    }
+
+    if (scalar.unit === LineItemUnit.Rooms
+        && per.unit === LineItemUnit.CostPerRoomPerNight
+        && per2?.unit === LineItemUnit.Nights) {
+      return scalar.value.times(per.value).times(per2.value);
     }
 
     throw new Error('invalid form variable unit');
   },
+
+  WAYS(scalar: FormVariable, ways: TransportationWay) {
+    if (ways === TransportationWay.OneWay) {
+      return { value: scalar.value.times(2), unit: scalar.unit };
+    }
+    
+    if (ways === TransportationWay.RoundTrip) {
+      return scalar;
+    }
+
+    throw new Error('invalid call to ways')
+  }
 });
 
 const outOfPocket = (x: BN) => {
@@ -124,35 +146,78 @@ const momentFormatter: (format: string) => IDateFormatProps = (format) => {
   };
 }
 
+enum TransportationWay {
+  OneWay,
+  RoundTrip
+}
+
+interface TransportationWaySpec {
+  value: TransportationWay;
+  icon: IconName;
+  label: string
+}
+
+const TransportationWaySpecs: TransportationWaySpec[] = [
+  {
+    value: TransportationWay.OneWay,
+    icon: 'arrow-right',
+    label: 'one way',
+  },
+  {
+    value: TransportationWay.RoundTrip,
+    icon: 'circle-arrow-right',
+    label: 'round trip',
+  }
+]
+
 const DEFAULT_DATE_FORMATTER = momentFormatter("MM/DD/YYYY");
 
 const App: React.FC = () => {
   const [attendeesCount, setAttendeesCount] = useState({ value: new BN(0), unit: LineItemUnit.Persons });
-  const { TOTAL, TIMES, PER_PERSON } = createFormOps(attendeesCount);
+  const { TOTAL, TIMES, PER_PERSON, WAYS } = createFormOps(attendeesCount);
   
   const [registration, setRegistration] = useState({ value: new BN(0), unit: LineItemUnit.CostPerPerson });
   
-  const [hotel, setHotel] = useState({ value: new BN(0), unit: LineItemUnit.CostPerPerson });
+  const [hotelFees, setHotelFees] = useState({ value: new BN(0), unit: LineItemUnit.CostPerGroup });
   const [hotelDateRange, setHotelDateRange] = useState([undefined, undefined] as DateRange);
+  const [hotelRooms, setHotelRooms] = useState({ value: new BN(0), unit: LineItemUnit.Rooms });
+  const [hotelCostPerRoom, setHotelCostPerRoom] = useState({ value: new BN(0), unit: LineItemUnit.CostPerRoomPerNight });
 
   const [transportationFixed, setTransportationFixed] = useState({ value: new BN(0), unit: LineItemUnit.CostPerPerson });
-  const [transportationDistance, setTransportationDistance] = useState({ value: new BN(0), unit: LineItemUnit.Miles });
-  const [transportationCostPerDistance, setTransportationCostPerDistance] = useState({ value: new BN(0), unit: LineItemUnit.PerMile })
-  const [transportationTicket, setTransportationTicket] = useState({ value: new BN(0), unit: LineItemUnit.CostPerPerson });
+  const [transportationVariableDistance, setTransportationVariableDistance] = useState({ value: new BN(0), unit: LineItemUnit.Miles });
+  const [transportationVariableCostPerDistance, setTransportationCostPerDistance] = useState({ value: new BN(0), unit: LineItemUnit.CostPerMile })
+  const [transportationCostPerTicket, setTransportationCostPerTicket] = useState({ value: new BN(0), unit: LineItemUnit.CostPerPerson });
+  const [transportationVariableWays, setTransportationVariableWays] = useState(TransportationWay.OneWay);
+  const [transportationTicketWays, setTransportationTicketWays] = useState(TransportationWay.RoundTrip);
   const [transportationMode, setTransportationMode] = useState(TransportationMode.Rental);
 
-  const hotelNights =
+  const hotelNightsValue =
     !hotelDateRange || (!hotelDateRange[0] && !hotelDateRange[1]) ? 0 :
     !!hotelDateRange[0] != !!hotelDateRange[1] ? 1 :
     Math.max(1, moment(hotelDateRange[1]).diff(moment(hotelDateRange[0]), 'day'))
 
-  const transportationVariable =
-    TIMES(transportationDistance, transportationCostPerDistance);
+  const hotelNights: FormVariable = { value: new BN(hotelNightsValue), unit: LineItemUnit.Nights };
+
+  const transportationVariableFees =
+    WAYS(
+      { value: TIMES(transportationVariableDistance, transportationVariableCostPerDistance), unit: LineItemUnit.CostPerGroup },
+      transportationVariableWays);
+  
+  const transportationVariableReimbursement =
+    WAYS({ value: transportationVariableDistance.value.times(TRAVEL_REIMBUSRMENT_PER_MILE), unit: LineItemUnit.CostPerGroup },
+      transportationVariableWays);
+
+  const transprotationVariable =
+    sum(TOTAL(transportationVariableFees)
+      , TOTAL(transportationVariableReimbursement));
+
+  const transportationTicket =
+    WAYS(transportationCostPerTicket, transportationTicketWays);
 
   const totalTransportation =
     sum(TOTAL(transportationFixed)
       , TOTAL(transportationTicket)
-      , transportationVariable);
+      , transprotationVariable);
 
   const perPersonRequestedTransportation =
     PER_PERSON(transportationFixed)
@@ -160,7 +225,15 @@ const App: React.FC = () => {
 
   const perPersonRequestedRegistration = PER_PERSON(registration);
 
-  const perPersonRequestedHotel = PER_PERSON(hotel);
+  const hotelRoomsTotal =
+    TIMES(hotelRooms, hotelCostPerRoom, hotelNights);
+
+  const totalHotel =
+    sum(TOTAL(hotelFees)
+      , hotelRoomsTotal);
+
+  const perPersonRequestedHotel =
+    PER_PERSON({ value: totalHotel, unit: LineItemUnit.CostPerGroup });
 
   const perPersonRequestedTotal =
     sum(perPersonRequestedRegistration
@@ -169,21 +242,19 @@ const App: React.FC = () => {
 
   const perPersonOutOfPocket =
     outOfPocket(perPersonRequestedTotal)
-      .decimalPlaces(0, BN.ROUND_UP);
+      .decimalPlaces(0, BN.ROUND_HALF_EVEN);
 
   const grandTotalOutOfPocket =
     perPersonOutOfPocket.times(attendeesCount.value);
 
   const totalRegistration = TOTAL(registration);
 
-  const totalHotel = TOTAL(hotel);
-
   const grandTotalRequested =
     sum(totalRegistration
       , totalTransportation
       , totalHotel);
 
-  const totalRequestedVariable = transportationVariable;
+  const totalRequestedVariable = transportationVariableFees;
 
   const totalRequestedFixed =
       perPersonRequestedTotal.times(attendeesCount.value);
@@ -191,6 +262,46 @@ const App: React.FC = () => {
   const grandTotalApproved =
     grandTotalRequested
       .minus(grandTotalOutOfPocket);
+
+  const state = {
+    attendeesCount,
+    registration,
+    hotel: {
+      dates: hotelDateRange,
+      nights: hotelNights,
+      rooms: hotelRooms,
+      costPerRoom: hotelCostPerRoom,
+      roomsTotal: hotelRoomsTotal,
+      fees: hotelFees,
+      totals: {
+        requested: totalHotel,
+        perPerson: perPersonRequestedHotel,
+      }
+    },
+    transportation: {
+      fixed: transportationFixed,
+      variable: {
+        distance: transportationVariableDistance,
+        costPerDistance: transportationVariableCostPerDistance,
+      },
+      ticket: transportationCostPerTicket,
+      mode: transportationMode,
+    },
+    totals: {
+      split: {
+        fixed: totalRequestedFixed,
+        variable: totalRequestedVariable,
+      },
+      decision: {
+        requested: grandTotalRequested,
+        approved: grandTotalApproved,
+      },
+      perPerson: {
+        requested: perPersonRequestedTotal,
+        outOfPocket: perPersonOutOfPocket,
+      }
+    }
+  }
 
   return (
     <>
@@ -244,13 +355,13 @@ const App: React.FC = () => {
               </FormGroup>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'row' }}>
+            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap' }}>
               <FormGroup
                 label="Requested variable"
                 style={{ padding: '0 10px', float: 'right', width: 148 }}
               >
                 <Icon icon="dollar" />
-                <span style={{ float: 'right' }}>{totalRequestedVariable.toFormat(2)}</span>
+                <span style={{ float: 'right' }}>{totalRequestedVariable.value.toFormat(2)}</span>
               </FormGroup>
 
               <FormGroup
@@ -261,6 +372,8 @@ const App: React.FC = () => {
                 <span style={{ float: 'right' }}>{totalRequestedFixed.toFormat(2)}</span>
               </FormGroup>
             </div>
+
+            {/* <pre>{JSON.stringify(state, null, 2)}</pre> */}
           </aside>
 
           <LineItemInput
@@ -294,11 +407,26 @@ const App: React.FC = () => {
           {TRANSPORTATION_SPEC[transportationMode].map((x, i) => {
             switch (x) {
               case 'ticket':
-                return <LineItemInput
-                  {...injectHooks(transportationTicket, setTransportationTicket)}
-                  label="Ticket price per person"
-                  name="transportation-ticket-fee"
-                  labelInfo="(required)" />
+                return <div style={{display: 'flex', flexWrap: 'wrap' }}>
+                  <LineItemInput
+                    {...injectHooks(transportationCostPerTicket, setTransportationCostPerTicket)}
+                    label="Ticket price per person"
+                    name="transportation-ticket-fee" />
+
+                  <FormGroup label="Ticket price is per">
+                    <ButtonGroup>
+                      {TransportationWaySpecs.map((x, i) =>
+                        <Button
+                          key={i}
+                          icon={x.icon}
+                          active={transportationTicketWays === x.value}
+                          onClick={() => setTransportationTicketWays(x.value)}>
+                          {x.label}
+                        </Button>
+                      )}
+                    </ButtonGroup>
+                  </FormGroup>
+                </div>
 
               case 'fixed':
                 return <LineItemInput
@@ -310,13 +438,27 @@ const App: React.FC = () => {
               case 'variable':
                 return (
                   <>
-                    <div style={{display: 'flex'}}>
+                    <div style={{display: 'flex', flexWrap: 'wrap'}}>
                       <LineItemInput
-                        {...injectHooks(transportationDistance, setTransportationDistance)}
+                        {...injectHooks(transportationVariableDistance, setTransportationVariableDistance)}
                         label="Travel distance"
                         name="transportation-variable-distance"
                         labelInfo="(required)"
                         units={[LineItemUnit.Miles]} />
+
+                      <FormGroup label="Travel distance covers">
+                        <ButtonGroup>
+                          {TransportationWaySpecs.map((x, i) =>
+                            <Button
+                              key={i}
+                              icon={x.icon}
+                              active={transportationVariableWays === x.value}
+                              onClick={() => setTransportationVariableWays(x.value)}>
+                              {x.label}
+                            </Button>
+                          )}
+                        </ButtonGroup>
+                      </FormGroup>
 
                       <FormGroup
                         label="Travel reimbursement rate"
@@ -331,16 +473,16 @@ const App: React.FC = () => {
                         style={{padding: '0 10px'}}
                       >
                         <Icon icon="dollar" />
-                        <span style={{float: 'right'}}>{transportationDistance.value.times(TRAVEL_REIMBUSRMENT_PER_MILE).toFormat(2)}</span>
+                        <span style={{float: 'right'}}>{transportationVariableReimbursement.value.toFormat(2)}</span>
                       </FormGroup>
                     </div>
 
                     <LineItemInput
-                      {...injectHooks(transportationCostPerDistance, setTransportationCostPerDistance)}
+                      {...injectHooks(transportationVariableCostPerDistance, setTransportationCostPerDistance)}
                       label="Cost per mile"
                       name="transportation-cost-per-mile"
                       labelInfo="(required)"
-                      units={[LineItemUnit.PerMile]} />
+                      units={[LineItemUnit.CostPerMile]} />
                   </>
                 );
             }
@@ -348,7 +490,7 @@ const App: React.FC = () => {
 
           <h3>Lodging / Hotel</h3>
 
-          <div style={{display: 'flex'}}>
+          <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             <FormGroup
               label="Hotel check-in &amp; check-out dates">
               <DateRangeInput
@@ -367,16 +509,40 @@ const App: React.FC = () => {
               style={{ padding: '0 10px' }}
             >
               <Icon icon="moon" />
-              <span style={{ float: 'right' }}><span style={{ paddingRight: 5 }}>{hotelNights}</span><Tag minimal>nights</Tag></span>
+              <span style={{ float: 'right' }}><span style={{ paddingRight: 5 }}>{hotelNights.value.toFixed(0)}</span><Tag minimal>nights</Tag></span>
             </FormGroup>
           </div>
 
-          <LineItemInput
-            {...injectHooks(hotel, setHotel)}
-            helperText="Helper text with details..."
-            label="Hotel fees"
-            name="hotel-fees"
-            labelInfo="(optional)" />
+          <div style={{ display: 'flex', flexWrap: 'wrap'}}>
+            <LineItemInput
+              {...injectHooks(hotelRooms, setHotelRooms)}
+              label="# of Rooms"
+              name="hotel-rooms"
+              labelInfo="(required)"
+              units={[LineItemUnit.Rooms]} />
+
+            <LineItemInput
+              {...injectHooks(hotelCostPerRoom, setHotelCostPerRoom)}
+              label="Cost per Room per Night"
+              name="hotel-cost-per-room"
+              labelInfo="(required)"
+              units={[LineItemUnit.CostPerRoomPerNight]} />
+
+            <LineItemInput
+              {...injectHooks(hotelFees, setHotelFees)}
+              label="Other hotel fees (include taxes, other fees)"
+              name="hotel-fees"
+              labelInfo="(optional)"
+              units={[LineItemUnit.CostPerGroup]} />
+
+            <FormGroup
+              label="Total for hotel"
+              style={{ padding: '0 10px' }}
+            >
+              <Icon icon="dollar" />
+              <span style={{ float: 'right' }}><span style={{ paddingRight: 5 }}>{totalHotel.toFormat(0, BN.ROUND_HALF_UP)}</span></span>
+            </FormGroup>
+          </div>
 
         </Card>
       </main>
