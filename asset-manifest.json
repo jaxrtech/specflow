@@ -1,0 +1,26 @@
+{
+  "files": {
+    "main.css": "/specflow/static/css/main.66a3f4eb.chunk.css",
+    "main.js": "/specflow/static/js/main.4825057e.chunk.js",
+    "main.js.map": "/specflow/static/js/main.4825057e.chunk.js.map",
+    "runtime-main.js": "/specflow/static/js/runtime-main.bd82643a.js",
+    "runtime-main.js.map": "/specflow/static/js/runtime-main.bd82643a.js.map",
+    "static/css/2.365cd67e.chunk.css": "/specflow/static/css/2.365cd67e.chunk.css",
+    "static/js/2.4da357f2.chunk.js": "/specflow/static/js/2.4da357f2.chunk.js",
+    "static/js/2.4da357f2.chunk.js.map": "/specflow/static/js/2.4da357f2.chunk.js.map",
+    "index.html": "/specflow/index.html",
+    "precache-manifest.23e2f33cbf82f84f9536d838220cca4e.js": "/specflow/precache-manifest.23e2f33cbf82f84f9536d838220cca4e.js",
+    "service-worker.js": "/specflow/service-worker.js",
+    "static/css/2.365cd67e.chunk.css.map": "/specflow/static/css/2.365cd67e.chunk.css.map",
+    "static/css/main.66a3f4eb.chunk.css.map": "/specflow/static/css/main.66a3f4eb.chunk.css.map",
+    "static/js/2.4da357f2.chunk.js.LICENSE": "/specflow/static/js/2.4da357f2.chunk.js.LICENSE",
+    "static/media/index.css": "/specflow/static/media/icons-20.ca7934b3.eot"
+  },
+  "entrypoints": [
+    "static/js/runtime-main.bd82643a.js",
+    "static/css/2.365cd67e.chunk.css",
+    "static/js/2.4da357f2.chunk.js",
+    "static/css/main.66a3f4eb.chunk.css",
+    "static/js/main.4825057e.chunk.js"
+  ]
+}
